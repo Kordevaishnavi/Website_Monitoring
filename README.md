@@ -18,6 +18,7 @@ A modern, full-stack website monitoring application built with Next.js 15 and Su
 - Visual website preview gallery
 - Clickable full-size image viewer
 
+<<<<<<< HEAD
 ### 🎨 User Interface
 - Beautiful orange-themed design
 - Dark mode support
@@ -56,6 +57,8 @@ npm run dev
 
 5. **Open your browser:**
 Navigate to `http://localhost:3000`
+=======
+>>>>>>> 4c6b1f8fa5f1246e7593368e5b4b196e13f9eb3b
 
 ## 📁 Project Structure
 
@@ -110,6 +113,7 @@ CREATE TABLE websites (
 3. Get your project URL and anon key
 4. Update your `.env.local` file
 
+<<<<<<< HEAD
 ## 📝 License
 
 This project is open source and available under the MIT License.
@@ -117,3 +121,5 @@ This project is open source and available under the MIT License.
 ## 🤝 Support
 
 If you encounter any issues or have questions, please check the setup guide at `/setup` or review the documentation.
+=======
+>>>>>>> 4c6b1f8fa5f1246e7593368e5b4b196e13f9eb3b
