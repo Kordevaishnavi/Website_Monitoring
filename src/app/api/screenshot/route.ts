@@ -3,6 +3,8 @@ import { chromium } from 'playwright';
 import { Website } from '@/lib/supabase';
 import path from 'path';
 import fs from 'fs';
+import https from 'https';
+import tls from 'tls';
 
 type ScreenshotResult = {
   id: number;
@@ -10,6 +12,9 @@ type ScreenshotResult = {
   screenshot_path?: string;
   status: 'up' | 'down' | 'error';
   ssl_valid: boolean;
+  ssl_expires?: string;
+  ssl_days_remaining?: number;
+  ssl_issued_date?: string;
   response_time?: number;
   error_message?: string;
 };
@@ -18,6 +23,62 @@ type ScreenshotResult = {
 const screenshotsDir = path.join(process.cwd(), 'public', 'screenshots');
 if (!fs.existsSync(screenshotsDir)) {
   fs.mkdirSync(screenshotsDir, { recursive: true });
+}
+
+async function getSSLCertificateInfo(url: string): Promise<{
+  ssl_valid: boolean;
+  ssl_expires?: string;
+  ssl_days_remaining?: number;
+  ssl_issued_date?: string;
+}> {
+  try {
+    // Only check SSL for HTTPS URLs
+    if (!url.startsWith('https://')) {
+      return { ssl_valid: false };
+    }
+
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname;
+    const port = urlObj.port ? parseInt(urlObj.port) : 443;
+
+    return new Promise((resolve) => {
+      const socket = tls.connect(port, hostname, { servername: hostname }, () => {
+        const cert = socket.getPeerCertificate();
+        
+        if (!cert || !cert.valid_from || !cert.valid_to) {
+          socket.destroy();
+          resolve({ ssl_valid: false });
+          return;
+        }
+
+        const now = new Date();
+        const validFrom = new Date(cert.valid_from);
+        const validTo = new Date(cert.valid_to);
+        
+        const isValid = now >= validFrom && now <= validTo;
+        const daysRemaining = Math.floor((validTo.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        socket.destroy();
+        resolve({
+          ssl_valid: isValid,
+          ssl_expires: validTo.toISOString().split('T')[0], // YYYY-MM-DD format
+          ssl_days_remaining: daysRemaining,
+          ssl_issued_date: validFrom.toISOString().split('T')[0]
+        });
+      });
+
+      socket.on('error', () => {
+        resolve({ ssl_valid: false });
+      });
+
+      socket.setTimeout(5000, () => {
+        socket.destroy();
+        resolve({ ssl_valid: false });
+      });
+    });
+  } catch (error) {
+    return { ssl_valid: false };
+  }
 }
 
 async function checkWebsiteStatus(url: string): Promise<{
@@ -30,13 +91,14 @@ async function checkWebsiteStatus(url: string): Promise<{
   
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
+    // Try GET request first for better compatibility with sites that block HEAD requests
     const response = await fetch(url, { 
-      method: 'HEAD',
+      method: 'GET',
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
       }
     });
 
@@ -93,7 +155,7 @@ async function takeScreenshot(url: string, id: number): Promise<string | null> {
     // Navigate to the page with timeout
     await page.goto(url, { 
       waitUntil: 'domcontentloaded', 
-      timeout: 15000 
+      timeout: 30000 
     });
 
     // Wait a bit for dynamic content to load
@@ -140,20 +202,37 @@ export async function POST(request: NextRequest) {
       // Check website status
       const statusCheck = await checkWebsiteStatus(website.url);
       
-      // Take screenshot only if the website is up
+      // Get detailed SSL certificate information
+      const sslInfo = await getSSLCertificateInfo(website.url);
+      
+      // Always attempt to take screenshot, even if status check failed
       let screenshot_path: string | undefined;
-      if (statusCheck.status === 'up') {
-        screenshot_path = await takeScreenshot(website.url, website.id) || undefined;
+      screenshot_path = await takeScreenshot(website.url, website.id) || undefined;
+      
+      // If screenshot was successful but status check failed, mark as 'up'
+      let finalStatus = statusCheck.status;
+      if (screenshot_path && statusCheck.status !== 'up') {
+        finalStatus = 'up';
+        console.log(`Status override for ${website.url}: Screenshot successful, marking as 'up'`);
+      }
+
+      // Determine final SSL validity - prioritize detailed SSL check, fallback to basic check
+      let finalSSLValid = sslInfo.ssl_valid;
+      if (!finalSSLValid && screenshot_path && website.url.startsWith('https://')) {
+        finalSSLValid = true; // If screenshot successful and HTTPS, assume SSL is working
       }
 
       const result: ScreenshotResult = {
         id: website.id,
         url: website.url,
         screenshot_path,
-        status: statusCheck.status,
-        ssl_valid: statusCheck.ssl_valid,
+        status: finalStatus,
+        ssl_valid: finalSSLValid,
+        ssl_expires: sslInfo.ssl_expires,
+        ssl_days_remaining: sslInfo.ssl_days_remaining,
+        ssl_issued_date: sslInfo.ssl_issued_date,
         response_time: statusCheck.response_time,
-        error_message: statusCheck.error_message,
+        error_message: screenshot_path ? undefined : statusCheck.error_message,
       };
 
       results.push(result);

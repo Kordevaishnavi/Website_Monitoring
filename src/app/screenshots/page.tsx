@@ -12,6 +12,9 @@ type ScreenshotStatus = {
   screenshot_path?: string;
   status: 'up' | 'down' | 'error' | 'checking';
   ssl_valid: boolean;
+  ssl_expires?: string;
+  ssl_days_remaining?: number;
+  ssl_issued_date?: string;
   response_time?: number;
   error_message?: string;
 };
@@ -309,6 +312,37 @@ export default function ScreenshotsPage() {
                         <span className="text-gray-500 dark:text-gray-400">Response:</span>
                         <span className="font-medium text-gray-900 dark:text-white">
                           {screenshot.response_time}ms
+                        </span>
+                      </div>
+                    )}
+
+                    {/* SSL Certificate Details */}
+                    {screenshot.ssl_expires && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-gray-400">SSL Expires:</span>
+                        <span className="font-medium text-gray-900 dark:text-white">
+                          {new Date(screenshot.ssl_expires).toLocaleDateString()}
+                        </span>
+                      </div>
+                    )}
+
+                    {screenshot.ssl_days_remaining !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-gray-400">Days Left:</span>
+                        <span className={`font-medium ${
+                          screenshot.ssl_days_remaining > 50 ? 'text-green-600' : 
+                          screenshot.ssl_days_remaining > 40 ? 'text-yellow-500' : 'text-red-600'
+                        }`}>
+                          {screenshot.ssl_days_remaining > 0 ? `${screenshot.ssl_days_remaining} days` : 'Expired'}
+                        </span>
+                      </div>
+                    )}
+
+                    {screenshot.ssl_issued_date && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-gray-400">SSL Issued:</span>
+                        <span className="font-medium text-gray-900 dark:text-white">
+                          {new Date(screenshot.ssl_issued_date).toLocaleDateString()}
                         </span>
                       </div>
                     )}

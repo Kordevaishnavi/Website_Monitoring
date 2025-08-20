@@ -39,6 +39,9 @@ export type ScreenshotResult = {
   screenshot_path?: string
   status: 'up' | 'down' | 'error'
   ssl_valid: boolean
+  ssl_expires?: string
+  ssl_days_remaining?: number
+  ssl_issued_date?: string
   response_time?: number
   error_message?: string
   last_checked: string
