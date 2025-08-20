@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+ import { NextRequest, NextResponse } from "next/server";
 import { chromium } from "playwright";
 import { Website } from "@/lib/supabase";
 import path from "path";
@@ -12,8 +12,10 @@ type ScreenshotResult = {
   screenshot_path?: string;
   status: "up" | "down" | "error";
   ssl_valid: boolean;
-  ssl_renew_date?: string;
-  ssl_expire_date?: string;
+  ssl_issued_date?: string;        // From remote: Date SSL was issued 
+  ssl_expires?: string;            // From remote: Alias for ssl_expire_date
+  ssl_expire_date?: string;        // From your version
+  ssl_renew_date?: string;         // From your version
   ssl_days_remaining?: number;
   response_time?: number;
   error_message?: string;
@@ -50,8 +52,10 @@ function needsSpecialHandling(url: string): boolean {
 async function getSSLCertificateInfo(url: string): Promise<{
   ssl_valid: boolean;
   ssl_expire_date?: string;
+  ssl_expires?: string;
   ssl_days_remaining?: number;
   ssl_renew_date?: string;
+  ssl_issued_date?: string;
 }> {
   try {
     // Only check SSL for HTTPS URLs
@@ -80,12 +84,17 @@ async function getSSLCertificateInfo(url: string): Promise<{
         const isValid = now >= validFrom && now <= validTo;
         const daysRemaining = Math.floor((validTo.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
+        const expire_date = validTo.toISOString().split('T')[0]; // YYYY-MM-DD format
+        const issued_date = validFrom.toISOString().split('T')[0];
+
         socket.destroy();
         resolve({
           ssl_valid: isValid,
-          ssl_expire_date: validTo.toISOString().split('T')[0], // YYYY-MM-DD format
+          ssl_expire_date: expire_date,
+          ssl_expires: expire_date, // Include both formats for compatibility
           ssl_days_remaining: daysRemaining,
-          ssl_renew_date: validFrom.toISOString().split('T')[0]
+          ssl_renew_date: issued_date,
+          ssl_issued_date: issued_date // Include both formats for compatibility
         });
       });
 
@@ -107,7 +116,9 @@ async function getSSLCertificateInfo(url: string): Promise<{
 async function checkSSLWithChecker(url: string): Promise<{
   ssl_valid: boolean;
   ssl_renew_date?: string;
+  ssl_issued_date?: string;
   ssl_expire_date?: string;
+  ssl_expires?: string;
   ssl_days_remaining?: number;
 }> {
   if (!url.startsWith("https://")) {
@@ -123,7 +134,9 @@ async function checkSSLWithChecker(url: string): Promise<{
     return {
       ssl_valid: !!valid,
       ssl_renew_date: validFrom,
+      ssl_issued_date: validFrom, // Include both formats for compatibility
       ssl_expire_date: validTo,
+      ssl_expires: validTo, // Include both formats for compatibility
       ssl_days_remaining: daysRemaining
     };
   } catch (e) {
@@ -135,7 +148,9 @@ async function checkWebsiteStatus(url: string): Promise<{
   status: "up" | "down" | "error";
   ssl_valid: boolean;
   ssl_renew_date?: string;
+  ssl_issued_date?: string;
   ssl_expire_date?: string;
+  ssl_expires?: string;
   ssl_days_remaining?: number;
   response_time?: number;
   error_message?: string;
@@ -170,7 +185,9 @@ async function checkWebsiteStatus(url: string): Promise<{
     let sslInfo: {
       ssl_valid: boolean;
       ssl_renew_date?: string;
+      ssl_issued_date?: string;
       ssl_expire_date?: string;
+      ssl_expires?: string;
       ssl_days_remaining?: number;
     } = { ssl_valid: false };
     
@@ -191,7 +208,9 @@ async function checkWebsiteStatus(url: string): Promise<{
       status: response.ok ? "up" : "down",
       ssl_valid: url.startsWith("https://") && (response.ok || sslInfo.ssl_valid),
       ssl_renew_date: sslInfo.ssl_renew_date,
+      ssl_issued_date: sslInfo.ssl_issued_date || sslInfo.ssl_renew_date,
       ssl_expire_date: sslInfo.ssl_expire_date,
+      ssl_expires: sslInfo.ssl_expires || sslInfo.ssl_expire_date,
       ssl_days_remaining: sslInfo.ssl_days_remaining,
       response_time,
     };
@@ -208,7 +227,9 @@ async function checkWebsiteStatus(url: string): Promise<{
     let sslInfo: {
       ssl_valid: boolean;
       ssl_renew_date?: string;
+      ssl_issued_date?: string;
       ssl_expire_date?: string;
+      ssl_expires?: string;
       ssl_days_remaining?: number;
     } = { ssl_valid: false };
     
@@ -228,7 +249,9 @@ async function checkWebsiteStatus(url: string): Promise<{
       status: "error",
       ssl_valid: sslInfo.ssl_valid,
       ssl_renew_date: sslInfo.ssl_renew_date,
+      ssl_issued_date: sslInfo.ssl_issued_date || sslInfo.ssl_renew_date,
       ssl_expire_date: sslInfo.ssl_expire_date,
+      ssl_expires: sslInfo.ssl_expires || sslInfo.ssl_expire_date,
       ssl_days_remaining: sslInfo.ssl_days_remaining,
       response_time,
       error_message,
@@ -411,7 +434,9 @@ export async function POST(request: NextRequest) {
         status: statusCheck.status,
         ssl_valid: statusCheck.ssl_valid,
         ssl_renew_date: statusCheck.ssl_renew_date,
+        ssl_issued_date: statusCheck.ssl_issued_date,
         ssl_expire_date: statusCheck.ssl_expire_date,
+        ssl_expires: statusCheck.ssl_expires,
         ssl_days_remaining: statusCheck.ssl_days_remaining,
         response_time: statusCheck.response_time,
         error_message: screenshot_path ? undefined : statusCheck.error_message,
