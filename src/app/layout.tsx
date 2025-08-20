@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import HydrationFix from "@/components/HydrationFix";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,7 +16,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Website Monitor Dashboard",
-  description: "Monitor your websites with automated screenshots and health checks. Built with Next.js and Supabase.",
+  description:
+    "Monitor your websites with automated screenshots and health checks. Built with Next.js and Supabase.",
 };
 
 export default function RootLayout({
@@ -27,10 +29,10 @@ export default function RootLayout({
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning={true}
       >
-        <ErrorBoundary>
-          {children}
-        </ErrorBoundary>
+        <HydrationFix />
+        <ErrorBoundary>{children}</ErrorBoundary>
       </body>
     </html>
   );
